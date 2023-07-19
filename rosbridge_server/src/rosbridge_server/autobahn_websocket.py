@@ -242,7 +242,14 @@ class RosbridgeWebSocket(WebSocketServerProtocol):
             binary = False
             message = message.encode('utf-8')
 
-        self.sendMessage(message, binary)
+        try:
+            self.sendMessage(message, binary)
+        except Exception as e:
+            print('Autobahn Exception caught!')
+            try:
+                self.sendClose()
+            except Exception as ex:
+                print('Exception closing Autobahn!')
 
     def onClose(self, was_clean, code, reason):
         if not hasattr(self, 'protocol'):
