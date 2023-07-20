@@ -178,14 +178,15 @@ class RosbridgeWebSocket(WebSocketServerProtocol):
             self.protocol = RosbridgeProtocol(cls.client_id_seed, parameters=parameters)
             self.incoming_queue = IncomingQueue(self.protocol)
             self.incoming_queue.start()
-            producer = OutgoingValve(self)
-            self.transport.registerProducer(producer, True)
-            producer.resumeProducing()
-            self.protocol.outgoing = producer.relay
+            self.producer = OutgoingValve(self)
+            self.transport.registerProducer(self.producer, True)
+            self.producer.resumeProducing()
+            self.protocol.outgoing = self.producer.relay
             self.authenticated = False
             cls.client_id_seed += 1
             cls.clients_connected += 1
             self.client_id = uuid.uuid4()
+            print('Client ID: ', self.client_id, ' Seed: ',  cls.client_id_seed)
             self.peer = self.transport.getPeer().host
             if cls.client_manager:
                 cls.client_manager.add_client(self.client_id, self.peer)
@@ -245,11 +246,12 @@ class RosbridgeWebSocket(WebSocketServerProtocol):
         try:
             self.sendMessage(message, binary)
         except Exception as e:
-            print('Autobahn Exception caught!')
+            rospy.logerr('Autobahn Exception caught!')
             try:
                 self.sendClose()
+                self.producer.stopProducing()
             except Exception as ex:
-                print('Exception closing Autobahn!')
+                rospy.logerr('Exception closing Autobahn!')
 
     def onClose(self, was_clean, code, reason):
         if not hasattr(self, 'protocol'):
@@ -259,6 +261,7 @@ class RosbridgeWebSocket(WebSocketServerProtocol):
 
         if cls.client_manager:
             cls.client_manager.remove_client(self.client_id, self.peer)
+        #cls.client_id_seed = 0 #EPH set this to enable a single connection at a time
         rospy.loginfo("Client disconnected. %d clients total.", cls.clients_connected)
 
         self.incoming_queue.finish()
